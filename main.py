@@ -77,5 +77,10 @@ def main():
 
     print("Deployment complete!")
 
+def gcf_proxy(event, context):
+    _ = event
+    _ = context
+    main()
+
 if __name__ == "__main__":
     main()
