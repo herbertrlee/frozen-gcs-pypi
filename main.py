@@ -1,11 +1,15 @@
 import os
+import shutil
 from collections import defaultdict
 
+import requests
 from flask import Flask, render_template, url_for
 from flask_frozen import Freezer
 from google.cloud import storage
 
 GCS_BUCKET = os.environ['GCS_BUCKET']
+NETLIFY_SITE_URL = os.environ['NETLIFY_SITE_URL']
+NETLIFY_ACCESS_TOKEN = os.environ['NETLIFY_ACCESS_TOKEN']
 
 storage_client = storage.Client()
 bucket = storage_client.get_bucket(GCS_BUCKET)
@@ -39,6 +43,20 @@ def package_index(package_name):
     return render_template("index.html", links=links)
 
 
+def main():
+    freezer.freeze()
+    shutil.make_archive("site", 'zip', freezer.root)
+
+    with open("site.zip", 'rb') as site_zip:
+        site_zip_data = site_zip.read()
+
+    response = requests.post(
+        f"https://api.netlify.com/api/v1/sites/{NETLIFY_SITE_URL}/deploys",
+        headers={"Content-Type": "application/zip", "Authorization": f"Bearer {NETLIFY_ACCESS_TOKEN}"},
+        data=site_zip_data
+    )
+
+    print(response.status_code)
 
 if __name__ == "__main__":
-    freezer.freeze()
+    main()
