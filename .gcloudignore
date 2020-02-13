@@ -1,0 +1,6 @@
+build/
+.gitignore
+deploy.sh
+LICENSE
+README.md
+site.zip

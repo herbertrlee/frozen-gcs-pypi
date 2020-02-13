@@ -1,5 +1,6 @@
 import os
 import shutil
+import uuid
 from collections import defaultdict
 
 import requests
@@ -11,8 +12,9 @@ GCS_BUCKET = os.environ['GCS_BUCKET']
 NETLIFY_SITE_URL = os.environ['NETLIFY_SITE_URL']
 NETLIFY_ACCESS_TOKEN = os.environ['NETLIFY_ACCESS_TOKEN']
 
-def create_pypi(packages):
+def create_pypi(packages, build_folder):
     app = Flask(__name__)
+    app.config['FREEZER_DESTINATION'] = f"{build_folder}/build"
     freezer = Freezer(app)
 
     @app.route("/index.html")
@@ -33,9 +35,12 @@ def create_pypi(packages):
         return render_template("index.html", links=links)
 
     freezer.freeze()
-    shutil.make_archive("site", 'zip', freezer.root)
+    return shutil.make_archive(f"{build_folder}/site", 'zip', base_dir=freezer.root)
 
-def main():
+def main(event, context):
+    _ = event
+    _ = context
+
     print("Reading GCS bucket.")
     storage_client = storage.Client()
     bucket = storage_client.get_bucket(GCS_BUCKET)
@@ -48,11 +53,15 @@ def main():
         if file_name:
             packages[package_name].append(file_name)
 
+    print("Creating build folder.")
+    random_string = uuid.uuid4().hex
+    build_folder = f"/tmp/{random_string}"
+
     print("Freezing PIP repository.")
-    create_pypi(packages)
+    archive_path = create_pypi(packages, build_folder)
 
     print("Creating site archive.")
-    with open("site.zip", 'rb') as site_zip:
+    with open(archive_path, 'rb') as site_zip:
         site_zip_data = site_zip.read()
 
     print("Deploying archive to Netlify.")
@@ -75,12 +84,8 @@ def main():
         response_data = response.json()
         deployment_ready = response_data["state"] == "ready"
 
-    print("Deployment complete!")
-
-def gcf_proxy(event, context):
-    _ = event
-    _ = context
-    main()
+    print("Deployment complete! Cleaning up build folder.")
+    shutil.rmtree(build_folder)
 
 if __name__ == "__main__":
-    main()
+    main(None, None)
